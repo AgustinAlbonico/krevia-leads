@@ -173,45 +173,54 @@ export const api = {
 
     if (isSupabaseConfigured() && supabase) {
       try {
-        let query = supabase.from('view_cities_with_stats').select('*');
+        const PAGE_SIZE = 1000;
+        let allData: City[] = [];
+        let from = 0;
 
-        if (filters.provinceId !== 'all') {
-          query = query.eq('province_id', filters.provinceId);
+        while (true) {
+          let chunkQuery = supabase.from('view_cities_with_stats').select('*');
+
+          if (filters.provinceId !== 'all') {
+            chunkQuery = chunkQuery.eq('province_id', filters.provinceId);
+          }
+
+          if (filters.search.trim()) {
+            chunkQuery = chunkQuery.ilike('name', `%${filters.search.trim()}%`);
+          }
+
+          if (filters.status === 'with_data') {
+            chunkQuery = chunkQuery.gt('business_count', 0);
+          } else if (filters.status === 'no_data') {
+            chunkQuery = chunkQuery.eq('business_count', 0);
+          }
+
+          // Ordenamiento
+          switch (filters.sortBy) {
+            case 'businesses_desc':
+              chunkQuery = chunkQuery.order('business_count', { ascending: false }).order('name', { ascending: true });
+              break;
+            case 'businesses_asc':
+              chunkQuery = chunkQuery.order('business_count', { ascending: true }).order('name', { ascending: true });
+              break;
+            case 'name_asc':
+              chunkQuery = chunkQuery.order('name', { ascending: true });
+              break;
+            case 'name_desc':
+              chunkQuery = chunkQuery.order('name', { ascending: false });
+              break;
+            case 'last_scraping':
+              chunkQuery = chunkQuery.order('last_scraped_at', { ascending: false, nullsFirst: false });
+              break;
+          }
+
+          const { data, error } = await chunkQuery.range(from, from + PAGE_SIZE - 1);
+          if (error || !data || data.length === 0) break;
+          allData = allData.concat(data);
+          if (data.length < PAGE_SIZE) break;
+          from += PAGE_SIZE;
         }
 
-        if (filters.search.trim()) {
-          query = query.ilike('name', `%${filters.search.trim()}%`);
-        }
-
-        if (filters.status === 'with_data') {
-          query = query.gt('business_count', 0);
-        } else if (filters.status === 'no_data') {
-          query = query.eq('business_count', 0);
-        }
-
-        // Ordenamiento
-        switch (filters.sortBy) {
-          case 'businesses_desc':
-            query = query.order('business_count', { ascending: false }).order('name', { ascending: true });
-            break;
-          case 'businesses_asc':
-            query = query.order('business_count', { ascending: true }).order('name', { ascending: true });
-            break;
-          case 'name_asc':
-            query = query.order('name', { ascending: true });
-            break;
-          case 'name_desc':
-            query = query.order('name', { ascending: false });
-            break;
-          case 'last_scraping':
-            query = query.order('last_scraped_at', { ascending: false, nullsFirst: false });
-            break;
-        }
-
-        const { data, error } = await query;
-        if (!error && data) {
-          return data;
-        }
+        return allData;
       } catch (err) {
         console.warn('Fallback a modo local para getCities:', err);
       }
