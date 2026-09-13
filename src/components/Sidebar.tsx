@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, MapPin, Building2, Database } from 'lucide-react';
+import { LayoutDashboard, MapPin, Building2, Database, HelpCircle } from 'lucide-react';
 import { isSupabaseConfigured } from '../services/supabase';
 
 export const Sidebar: React.FC = () => {
@@ -10,6 +10,7 @@ export const Sidebar: React.FC = () => {
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/cities', label: 'Ciudades', icon: MapPin },
     { to: '/businesses', label: 'Negocios', icon: Building2 },
+    { to: '/help', label: 'Ayuda', icon: HelpCircle },
   ];
 
   return (

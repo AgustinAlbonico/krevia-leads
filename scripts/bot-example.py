@@ -1,66 +1,63 @@
 #!/usr/bin/env python3
 """
 ==============================================================================
-KREVIA LEADS - BOT DE SCRAPING EN PYTHON (EJEMPLO DE INTEGRACIÓN)
+KREVIA LEADS - BOT DE SCRAPING EN PYTHON (INTEGRACIÓN OFICIAL)
 ==============================================================================
-Este script muestra cómo tus bots de scraping locales (ej. Google Maps, Instagram,
-directorios web) deben enviar los leads encontrados directamente a Supabase
-sin necesidad de un servidor intermedio.
+Este script consume las ciudades y provincias cargadas en Supabase (Fuente Única
+de Verdad) para garantizar que los IDs coincidan exactamente con el panel web.
 
 Requisitos mínimos:
     pip install requests
 """
 
 import os
-import re
-import json
 import requests
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 # ==============================================================================
-# 1. CONFIGURACIÓN DE SUPABASE
+# 1. CONFIGURACIÓN DE CONEXIÓN
 # ==============================================================================
-# Podés definir estas variables en tu entorno o pasarlas directamente.
-# Se recomienda usar la SUPABASE_SERVICE_ROLE_KEY para que el bot tenga
-# permisos completos de INSERT/UPSERT sin restricciones.
-
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://tu-proyecto.supabase.co")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kkptleilhonswqrjydnj.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "tu-service-role-key-secreta")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json",
-    "Prefer": "return=representation"
+    "Content-Type": "application/json"
 }
 
 # ==============================================================================
-# 2. FUNCIONES AUXILIARES DE SUPABASE
+# 2. CONSULTAR PROVINCIAS Y CIUDADES OFICIALES DESDE SUPABASE
 # ==============================================================================
 
-def get_or_create_city_id(city_name: str, province_name: str = "Santa Fe") -> Optional[int]:
+def get_all_provinces() -> List[Dict[str, Any]]:
     """
-    Busca el ID de una ciudad por nombre. Si no existe, la crea vinculada a la provincia.
+    Obtiene las 24 provincias oficiales cargadas en Supabase.
+    """
+    url = f"{SUPABASE_URL}/rest/v1/provinces?select=id,name,code&order=name.asc"
+    res = requests.get(url, headers=HEADERS)
+    return res.json() if res.status_code == 200 else []
+
+
+def get_cities_by_province(province_id: int) -> List[Dict[str, Any]]:
+    """
+    Obtiene todas las ciudades de una provincia dada para que el bot itere sobre ellas.
+    """
+    url = f"{SUPABASE_URL}/rest/v1/cities?province_id=eq.{province_id}&select=id,name&order=name.asc"
+    res = requests.get(url, headers=HEADERS)
+    return res.json() if res.status_code == 200 else []
+
+
+def get_city_id(city_name: str) -> Optional[int]:
+    """
+    Busca el ID oficial de la ciudad en la base de datos para no inventar IDs.
+    Ejemplo: get_city_id("Rosario") -> Devuelve el ID exacto que ve el panel web.
     """
     url = f"{SUPABASE_URL}/rest/v1/cities?name=ilike.{city_name}&select=id,name"
     res = requests.get(url, headers=HEADERS)
     if res.status_code == 200 and res.json():
         return res.json()[0]["id"]
-
-    # Si no existe, buscar provincia
-    prov_res = requests.get(f"{SUPABASE_URL}/rest/v1/provinces?name=ilike.{province_name}&select=id", headers=HEADERS)
-    if prov_res.status_code == 200 and prov_res.json():
-        prov_id = prov_res.json()[0]["id"]
-        # Crear ciudad
-        create_res = requests.post(
-            f"{SUPABASE_URL}/rest/v1/cities",
-            headers=HEADERS,
-            json={"name": city_name, "province_id": prov_id}
-        )
-        if create_res.status_code in (200, 201) and create_res.json():
-            return create_res.json()[0]["id"]
-
-    print(f"[!] No se pudo resolver o crear la ciudad: {city_name}")
+    print(f"[!] Ciudad '{city_name}' no encontrada en la base oficial.")
     return None
 
 
@@ -73,10 +70,10 @@ def get_or_create_category_id(category_name: str) -> Optional[int]:
     if res.status_code == 200 and res.json():
         return res.json()[0]["id"]
 
-    # Crear categoría si no existe
+    # Si no existe, lo crea
     create_res = requests.post(
         f"{SUPABASE_URL}/rest/v1/business_categories",
-        headers=HEADERS,
+        headers={**HEADERS, "Prefer": "return=representation"},
         json={"name": category_name}
     )
     if create_res.status_code in (200, 201) and create_res.json():
@@ -90,15 +87,15 @@ def get_or_create_category_id(category_name: str) -> Optional[int]:
 
 def generate_commercial_message(name: str, category: str, has_website: bool, city: str) -> str:
     """
-    Genera automáticamente el mensaje persuasivo que vas a copiar desde el panel web.
+    Genera el mensaje que luego vas a copiar con 1 click desde Krevia Leads.
     """
     if not has_website:
         return (
             f"Hola, estuve viendo su negocio {name} en {city} y noté que actualmente "
-            f"no cuentan con un sitio web institucional.\n\n"
+            f"no cuentan con un sitio web institucional.\\n\\n"
             f"Trabajo desarrollando páginas web y soluciones digitales pensadas específicamente "
             f"para el rubro {category.lower()}, y creo que podríamos ayudarlos a posicionarse "
-            f"mejor en Google y captar nuevos clientes en la zona.\n\n"
+            f"mejor en Google y captar nuevos clientes en la zona.\\n\\n"
             f"Si les interesa, puedo mostrarles algunas opciones y modelos sin ningún tipo de compromiso. "
             f"¿Tienen unos minutos para conversar?"
         )
@@ -106,7 +103,7 @@ def generate_commercial_message(name: str, category: str, has_website: bool, cit
         return (
             f"Hola equipo de {name}! Estuve viendo su presencia online en {city}. "
             f"Noté que disponen de un sitio web, pero podemos colaborar en optimizarlo "
-            f"para celulares y conectar directamente pedidos y reservas a WhatsApp.\n\n"
+            f"para celulares y conectar directamente pedidos y reservas a WhatsApp.\\n\\n"
             f"¿Les interesaría ver una breve propuesta de mejora para su negocio?"
         )
 
@@ -117,10 +114,10 @@ def generate_commercial_message(name: str, category: str, has_website: bool, cit
 def save_business_lead(lead_data: Dict[str, Any]) -> bool:
     """
     Envía el negocio a Supabase.
-    Si source + external_id ya existe, actualiza el registro (UPSERT)
-    evitando duplicar negocios repetidos.
+    'resolution=merge-duplicates' asegura que si el bot vuelve a encontrar
+    el mismo negocio (mismo source + external_id de Google Maps), lo actualiza
+    sin duplicarlo.
     """
-    # Usamos merge-duplicates para que respete el índice UNIQUE (source, external_id)
     upsert_headers = {
         **HEADERS,
         "Prefer": "resolution=merge-duplicates,return=representation"
@@ -139,93 +136,60 @@ def save_business_lead(lead_data: Dict[str, Any]) -> bool:
         return False
 
 # ==============================================================================
-# 5. EJECUCIÓN DEL FLUJO DE SCRAPING DE EJEMPLO
+# 5. EJEMPLO DE FLUJO DE UN BOT
 # ==============================================================================
 
 def run_sample_bot():
     print("================================================================")
-    print("🤖 KREVIA LEADS - SIMULACIÓN DE BOT DE SCRAPING")
+    print("🤖 KREVIA LEADS - EJECUCIÓN DE BOT DE SCRAPING")
     print("================================================================")
 
-    # 1. Parámetros de búsqueda del bot
-    target_city = "Rosario"
-    target_province = "Santa Fe"
-    target_category = "Mueblería"
+    # 1. Definir objetivo
+    target_city_name = "Rosario"
+    target_category_name = "Mueblería"
 
-    print(f"[*] Buscando negocios en: {target_city} ({target_province}) - Rubro: {target_category}...")
-
-    # 2. Obtener IDs relacionados en la base de datos
-    city_id = get_or_create_city_id(target_city, target_province)
-    category_id = get_or_create_category_id(target_category)
+    # 2. Consultar IDs oficiales en Supabase (Fuente Única de Verdad)
+    print(f"[*] Consultando Supabase para obtener el ID de '{target_city_name}'...")
+    city_id = get_city_id(target_city_name)
+    category_id = get_or_create_category_id(target_category_name)
 
     if not city_id:
-        print("[!] No se puede continuar sin el ID de ciudad.")
+        print(f"[!] Error: La ciudad '{target_city_name}' no existe en la base. Abortando.")
         return
 
-    # 3. Datos simulados extraídos por el bot (ej. de Google Maps API o Scraper Playwright)
-    scraped_leads = [
-        {
-            "name": "Fábrica de Sillas del Litoral",
-            "address": "San Juan 2540, Rosario",
-            "phone": "+54 341 4258900",
-            "whatsapp": "+54 9 341 6889911",
-            "email": "ventas@sillaslitoral.com.ar",
-            "instagram": "@sillaslitoral.ros",
-            "website": None,  # No tiene web
-            "google_maps_url": "https://maps.google.com/?cid=9901",
-            "source": "google_maps",
-            "external_id": "ChIJ_sillas_litoral_rosario_001",
-            "score": 90
-        },
-        {
-            "name": "Amoblamientos del Centro",
-            "address": "Mitre 850, Rosario",
-            "phone": "+54 341 4112233",
-            "whatsapp": "+54 9 341 5443322",
-            "email": None,
-            "instagram": "@amoblamientos.centro",
-            "website": "https://amoblamientoscentro.com.ar",  # Sí tiene web
-            "google_maps_url": "https://maps.google.com/?cid=9902",
-            "source": "google_maps",
-            "external_id": "ChIJ_amoblamientos_centro_rosario_002",
-            "score": 55
-        }
-    ]
+    print(f"[✓] ID oficial de {target_city_name}: {city_id}")
+    print(f"[✓] ID oficial de {target_category_name}: {category_id}")
 
-    # 4. Procesar y enviar cada lead
-    for item in scraped_leads:
-        has_web = bool(item.get("website"))
-        
-        # Generar mensaje comercial adaptado
-        msg = generate_commercial_message(
-            name=item["name"],
-            category=target_category,
-            has_website=has_web,
-            city=target_city
-        )
+    # 3. Datos obtenidos por tu bot desde Google Maps / Redes
+    # En tu bot real, acá hacés el scraping con Playwright, BeautifulSoup, Selenium, etc.
+    dummy_scraped_lead = {
+        "city_id": city_id,              # ID oficial de Supabase
+        "category_id": category_id,      # ID oficial de Supabase
+        "name": "Mueblería San Cayetano",
+        "address": "Av. San Martín 1540, Rosario",
+        "phone": "+54 341 4558899",
+        "whatsapp": "+54 9 341 6112233",
+        "instagram": "@muebleriasancayetano",
+        "email": "contacto@sancayetanomuebles.com",
+        "website": None,
+        "has_website": False,
+        "google_maps_url": "https://maps.google.com/?cid=12345",
+        "source": "google_maps",
+        "external_id": "ChIJ_sancayetano_rosario_place_id",  # Place ID para deduplicación
+        "score": 90,
+        "status": "NEW"
+    }
 
-        lead_payload = {
-            "city_id": city_id,
-            "category_id": category_id,
-            "name": item["name"],
-            "address": item.get("address"),
-            "phone": item.get("phone"),
-            "whatsapp": item.get("whatsapp"),
-            "email": item.get("email"),
-            "instagram": item.get("instagram"),
-            "website": item.get("website"),
-            "has_website": has_web,
-            "google_maps_url": item.get("google_maps_url"),
-            "source": item.get("source", "google_maps"),
-            "external_id": item.get("external_id"),
-            "score": item.get("score"),
-            "generated_message": msg,
-            "status": "NEW"
-        }
+    # Generar mensaje automático
+    dummy_scraped_lead["generated_message"] = generate_commercial_message(
+        dummy_scraped_lead["name"],
+        target_category_name,
+        dummy_scraped_lead["has_website"],
+        target_city_name
+    )
 
-        save_business_lead(lead_payload)
-
-    print("\n[✓] Simulación finalizada. Ya podés ver los nuevos leads en Krevia Leads.")
+    # 4. Enviar a Supabase
+    save_business_lead(dummy_scraped_lead)
 
 if __name__ == "__main__":
     run_sample_bot()

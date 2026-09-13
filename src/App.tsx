@@ -6,6 +6,7 @@ import { Cities } from './pages/Cities';
 import { CityDetail } from './pages/CityDetail';
 import { Businesses } from './pages/Businesses';
 import { BusinessDetail } from './pages/BusinessDetail';
+import { Help } from './pages/Help';
 
 export const App: React.FC = () => {
   return (
@@ -17,6 +18,7 @@ export const App: React.FC = () => {
           <Route path="cities/:id" element={<CityDetail />} />
           <Route path="businesses" element={<Businesses />} />
           <Route path="businesses/:id" element={<BusinessDetail />} />
+          <Route path="help" element={<Help />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
