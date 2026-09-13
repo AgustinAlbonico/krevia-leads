@@ -20,17 +20,17 @@ Bots locales (Python / Node en tu PC)
 
 ---
 
-## 🗄️ 1. Configuración de Base de Datos en Supabase
+## 🗄️ 1. Configuración de Base de Datos en Supabase (1 Solo Paso)
 
-1. Creá un proyecto nuevo en [Supabase](https://supabase.com).
-2. Entrá en el **SQL Editor** de tu proyecto Supabase.
-3. Copiá y ejecutá el contenido del archivo `supabase/schema.sql`:
+1. Entrá en el **SQL Editor** de tu proyecto en [Supabase](https://supabase.com).
+2. Copiá y ejecutá el contenido de `supabase/full_setup.sql`:
    - Crea las tablas `provinces`, `cities`, `business_categories` y `businesses`.
-   - Crea índices optimizados y la restricción `UNIQUE (source, external_id)` para deduplicación.
+   - Crea índices de rendimiento y restricción `UNIQUE (source, external_id)` para deduplicación.
    - Crea el trigger automático de `updated_at`.
-   - Crea la vista `view_cities_with_stats` para consultas de conteo ultra rápidas.
+   - Crea la vista `view_cities_with_stats` para estadísticas inmediatas.
    - Configura las políticas de seguridad (Row Level Security).
-4. (Opcional) Ejecutá `supabase/seed.sql` para cargar las 24 provincias de Argentina, ciudades principales de Santa Fe, Córdoba, Buenos Aires, Mendoza y Entre Ríos, rubros y negocios de prueba.
+   - Carga las **24 provincias** y las **4.274 ciudades y localidades oficiales** de Argentina (INDEC / Georef).
+   - **La tabla `businesses` queda 100% vacía**, esperando exclusivamente los datos reales de tus scrapers.
 
 ---
 
